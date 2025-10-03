@@ -1,11 +1,16 @@
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 from typing import List, Dict, Optional
+import os
+from dotenv import load_dotenv
 
-# Configuration Spotify
-SPOTIPY_CLIENT_ID = '610313e73c6d4333bf2831d16208d75f'
-SPOTIPY_CLIENT_SECRET = '81527ba3f7844a8bb7c9ada01528dc74'
-REDIRECT_URL = 'http://localhost:8888/callback'
+# Charger les variables d'environnement depuis le fichier .env
+load_dotenv()
+
+# Configuration Spotify depuis les variables d'environnement
+SPOTIPY_CLIENT_ID = os.getenv('SPOTIPY_CLIENT_ID')
+SPOTIPY_CLIENT_SECRET = os.getenv('SPOTIPY_CLIENT_SECRET')
+REDIRECT_URL = os.getenv('REDIRECT_URL', 'http://localhost:8888/callback')
 
 # Initialisation du client Spotify
 sp = spotipy.Spotify(

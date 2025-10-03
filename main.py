@@ -443,7 +443,25 @@ class SpotifyApp(App):
     def update_queue(self):
         """Met à jour la liste d'attente"""
         queue_widget = self.query_one("#queue", QueueWidget)
-        queue_widget.tracks = self.spotify.get_queue()
+        new_tracks = self.spotify.get_queue()
+        
+        # Comparer les listes pour éviter les mises à jour inutiles
+        if not self._queues_are_equal(queue_widget.tracks, new_tracks):
+            queue_widget.tracks = new_tracks
+    
+    def _queues_are_equal(self, old_tracks, new_tracks):
+        """Compare deux listes de pistes pour déterminer si elles sont identiques"""
+        if len(old_tracks) != len(new_tracks):
+            return False
+        
+        for old_track, new_track in zip(old_tracks, new_tracks):
+            # Comparer les propriétés importantes
+            if (old_track.id != new_track.id or 
+                old_track.title != new_track.title or 
+                old_track.artist != new_track.artist):
+                return False
+        
+        return True
 
     def on_button_pressed(self, event: Button.Pressed):
         """Gestion des clics sur les boutons"""
