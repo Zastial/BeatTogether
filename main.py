@@ -5,17 +5,14 @@ la liste d'attente et permettre d'ajouter des sons.
 """
 
 import asyncio
-import requests
-from io import BytesIO
 from datetime import datetime
 from typing import List, Optional, Dict
 from textual.app import App, ComposeResult
 from textual.containers import Container, Horizontal, Vertical
 from textual.widgets import (
     Header, Footer, Static, Button, Input, ListView, ListItem, Label,
-    ProgressBar, TextArea
+    ProgressBar, TextArea, TabbedContent, Tab, TabPane
 )
-from textual_image.renderable import Image
 from textual.binding import Binding
 from textual.reactive import reactive
 from textual.message import Message
@@ -40,7 +37,6 @@ class Track:
             self.is_playing = track_data.get('is_playing', False)
             self.progress_ms = track_data.get('progress_ms', 0)
             self.duration_ms = track_data.get('duration_ms', 0)
-            self.image_url = track_data.get('image_url', '')
         else:
             # Création manuelle (pour compatibilité)
             self.id = track_id or ''
@@ -50,7 +46,6 @@ class Track:
             self.is_playing = False
             self.progress_ms = 0
             self.duration_ms = 0
-            self.image_url = ''
         
         self.added_at = datetime.now()
 
@@ -155,12 +150,7 @@ class TrackItem(ListItem):
         self.track = track
 
     def compose(self):
-        url = self.track.image_url if self.track.image_url else "https://picsum.photos/200"
-        response = requests.get(url)
-        image_data = BytesIO(response.content)
-
         yield Horizontal(
-            Image(image_data),
             Vertical(
                 Label(f"[bold]{self.track.title}[/bold]"),
                 Label(f"{self.track.artist}"),
@@ -179,13 +169,8 @@ class CurrentTrackWidget(Static):
         self.track = None
 
     def compose(self):
-        url = "https://picsum.photos/200"
-        response = requests.get(url)
-        image_data = BytesIO(response.content)
-
         yield Label("🎵 Musique en cours", classes="title")
         yield Horizontal(
-            Image(image_data),
             Vertical(
                 Static("Aucune musique en cours", id="current-track-info"),
                 Static("", id="current-track-details"),
@@ -194,6 +179,10 @@ class CurrentTrackWidget(Static):
             id="current-track-container"
         )
         yield ProgressBar(total=100, show_eta=False, show_percentage=False, id="progress-bar")
+        yield Horizontal(
+            Button("🔍 Ajouter un son", id="search-btn-main"),
+            id="main-controls"
+        )
 
     def on_mount(self):
         """Initialisation après le montage du widget"""
@@ -217,19 +206,12 @@ class CurrentTrackWidget(Static):
                 duration_text = self.get_duration_display(track)
                 self.query_one("#current-track-duration").update(duration_text)
                 
-                # Afficher l'image de l'album
-                if track.image_url:
-                    self.query_one("#current-track-image", Image).src = track.image_url
-                else:
-                    self.query_one("#current-track-image", Image).src = ""
-                
                 # Mettre à jour la barre de progression
                 self.update_progress_bar(track)
             else:
                 self.query_one("#current-track-info").update("Aucune musique en cours")
                 self.query_one("#current-track-details").update("")
                 self.query_one("#current-track-duration").update("")
-                self.query_one("#current-track-image", Image).src = ""
                 # Réinitialiser la barre de progression
                 progress_bar = self.query_one("#progress-bar", ProgressBar)
                 progress_bar.progress = 0
@@ -249,7 +231,7 @@ class CurrentTrackWidget(Static):
                 duration_min = duration_seconds // 60
                 duration_sec = duration_seconds % 60
                 
-                return f"⏱️ {progress_min:02d}:{progress_sec:02d} / {duration_min:02d}:{duration_sec:02d}"
+                return f"⏱️  {progress_min:02d}:{progress_sec:02d} / {duration_min:02d}:{duration_sec:02d}"
         
         return "⏱️ --:-- / --:--"
 
@@ -307,13 +289,33 @@ class SearchWidget(Static):
         self.query_one("#search-results", ListView).clear()
 
 
+class SearchScreen(Static):
+    """Écran de recherche dédié"""
+    
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.search_results = []
+
+    def compose(self):
+        yield Label("🎵 Recherche de musique", classes="title")
+        yield Horizontal(
+            Button("🏠 Retour", id="back-btn"),
+            id="search-controls"
+        )
+        yield Input(placeholder="Tapez le nom d'une chanson ou d'un artiste...", id="search-input-screen")
+        yield Button("🔍 Rechercher", id="search-btn-screen")
+        yield ListView(id="search-results-screen")
+
+    def clear_search_results(self):
+        self.query_one("#search-results-screen", ListView).clear()
+
+
 class SpotifyApp(App):
     """Application principale Spotify avec Textual"""
     
     CSS = """
     .title {
         color: $primary;
-        margin-bottom: 1;
     }
     
     .controls {
@@ -328,15 +330,22 @@ class SpotifyApp(App):
     #current-track-info {
         text-style: bold;
         margin: 1 0;
+        padding-left: 3;
     }
     
     #current-track-details {
         color: $text-muted;
         margin-bottom: 1;
+        padding-left: 3;
+    }
+
+    #current-track-duration {
+        padding-left: 3;
     }
     
     #progress-bar {
         margin: 1 0;
+        padding-left: 3;
     }
     
     #search-results {
@@ -354,14 +363,24 @@ class SpotifyApp(App):
         padding: 1;
     }
     
-    #current-track-image, #track-image {
-        width: 10;
-        height: 10;
-        text-align: center;
-    }
-    
     #current-track-container, #track-container {
         height: auto;
+    }
+    
+    #search-results-screen {
+        height: 15;
+        border: solid $primary;
+        margin-top: 1;
+    }
+    
+    #search-controls {
+        margin-top: 1;
+        margin-bottom: 1;
+    }
+    
+    #search-input-screen {
+        margin-top: 1;
+        margin-bottom: 1;
     }
     
     Horizontal {
@@ -386,10 +405,16 @@ class SpotifyApp(App):
         yield Header()
         yield Container(
             Vertical(
-                CurrentTrackWidget(id="current-track"),
-                Horizontal(
+                # Écran principal
+                Vertical(
+                    CurrentTrackWidget(id="current-track"),
                     QueueWidget(id="queue"),
-                    SearchWidget(id="search"),
+                    id="main-screen"
+                ),
+                # Écran de recherche
+                Vertical(
+                    SearchScreen(id="search-screen"),
+                    id="search-screen-container"
                 ),
             ),
             id="main-container"
@@ -400,10 +425,15 @@ class SpotifyApp(App):
         """Initialisation de l'application"""
         self.update_current_track()
         self.update_queue()
-        self.title = "🎵 Spotify Textual Player"
+        self.title = ""
+        
+        # Masquer l'écran de recherche par défaut
+        self.query_one("#search-screen-container").display = False
         
         # Mise à jour automatique de la piste en cours toutes les secondes
         self.set_interval(1.0, self.update_current_track)
+        # Mise à jour automatique de la liste d'attente toutes les 3 secondes
+        self.set_interval(3.0, self.update_queue)
 
     def update_current_track(self):
         """Met à jour l'affichage de la piste en cours"""
@@ -419,11 +449,19 @@ class SpotifyApp(App):
         """Gestion des clics sur les boutons"""
         if event.button.id == "search-btn":
             self.search_tracks()
+        elif event.button.id == "search-btn-main":
+            self.show_search_screen()
+        elif event.button.id == "back-btn":
+            self.show_main_screen()
+        elif event.button.id == "search-btn-screen":
+            self.search_tracks_screen()
 
     def on_input_submitted(self, event: Input.Submitted):
         """Gestion de la soumission du champ de recherche"""
         if event.input.id == "search-input":
             self.search_tracks()
+        elif event.input.id == "search-input-screen":
+            self.search_tracks_screen()
 
     def search_tracks(self):
         """Recherche des pistes"""
@@ -463,7 +501,56 @@ class SpotifyApp(App):
                     self.notify(f"✅ '{selected_item.track.title}' ajoutée à la liste d'attente!")
                 else:
                     self.notify(f"❌ Erreur lors de l'ajout de '{selected_item.track.title}'")
+        
+        elif event.list_view.id == "search-results-screen":
+            # Ajouter la piste sélectionnée à la queue depuis l'écran de recherche
+            selected_item = event.item
+            if hasattr(selected_item, 'track'):
+                success = self.spotify.add_to_queue(selected_item.track)
+                if success:
+                    self.update_queue()
+                    self.notify(f"✅ '{selected_item.track.title}' ajoutée à la liste d'attente!")
+                    # Retourner à l'écran d'accueil après ajout
+                    self.show_main_screen()
+                else:
+                    self.notify(f"❌ Erreur lors de l'ajout de '{selected_item.track.title}'")
 
+    def show_search_screen(self):
+        """Affiche l'écran de recherche"""
+        self.query_one("#main-screen").display = False
+        self.query_one("#search-screen-container").display = True
+
+    def show_main_screen(self):
+        """Affiche l'écran principal"""
+        self.query_one("#main-screen").display = True
+        self.query_one("#search-screen-container").display = False
+        # Mettre à jour la liste d'attente lors du retour
+        self.update_queue()
+
+    def search_tracks_screen(self):
+        """Recherche des pistes dans l'écran dédié"""
+        search_input = self.query_one("#search-input-screen", Input)
+        query = search_input.value.strip()
+        
+        if not query:
+            return
+
+        # Recherche via l'API Spotify
+        self.search_results = self.spotify.search_tracks(query)
+        
+        # Affichage des résultats
+        search_results_list = self.query_one("#search-results-screen", ListView)
+        search_results_list.clear()
+        
+        for track in self.search_results:
+            item = TrackItem(track)
+            item.add_class("search-result")
+            search_results_list.append(item)
+
+
+    def clear_search_results_screen(self):
+        """Nettoie les résultats de l'écran de recherche"""
+        self.query_one("#search-results-screen", ListView).clear()
 
     def action_quit(self):
         """Action quitter"""
