@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  spotify-web:
+    build: .
+    ports:
+      - "8007:8000"
+    environment:
+      - SPOTIPY_CLIENT_ID=${SPOTIPY_CLIENT_ID}
+      - SPOTIPY_CLIENT_SECRET=${SPOTIPY_CLIENT_SECRET}
+      - REDIRECT_URL=${REDIRECT_URL}
+    volumes:
+      - ./.env:/app/.env
+    restart: unless-stopped

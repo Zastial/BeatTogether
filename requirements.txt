@@ -1,3 +1,4 @@
 textual>=0.41.0
+textual-serve>=0.41.0
 spotipy>=2.24.0
 python-dotenv>=1.0.0
