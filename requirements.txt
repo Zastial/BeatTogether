@@ -1,0 +1,2 @@
+textual>=0.41.0
+spotipy>=2.24.0
